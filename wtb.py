@@ -316,7 +316,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "-P",
         "--protocol",
-        default="icmp",
+        default="all",
         type=str,
         choices=["udp", "tcp", "icmp", "http", "tls"],
         help="protocol choice (default: %(default)s)",
@@ -374,30 +374,37 @@ if __name__ == "__main__":
     # only spawn multiple threads if we have multiple targets
     thread_count = len(targets) if len(targets) < args.threads else args.threads
 
+    if args.protocol == "all":
+        protocols = ["icmp", "tcp", "udp", "http", "tls"]
+    else:
+        protocols = [args.protocol]
+
     start_time = time.time()
 
-    # initialize a thread pool for each target in the list with
-    # a lock for the multiprocessing pool for output to stdout
-    with multiprocessing.Pool(
-        processes=thread_count, initializer=init, initargs=(multiprocessing.Lock(),)
-    ) as pool:
+    for protocol in protocols:
 
-        log.info("Initializing traceroute...")
+        # initialize a thread pool for each target in the list with
+        # a lock for the multiprocessing pool for output to stdout
+        with multiprocessing.Pool(
+            processes=thread_count, initializer=init, initargs=(multiprocessing.Lock(),)
+        ) as pool:
 
-        # zip up the arguments as all of the targets, repeating the protocol,
-        # max_ttl, and timeout for each individual traceroute
-        try:
-            pool.starmap(
-                Traceroute,
-                zip(
-                    targets,
-                    repeat(args.protocol),
-                    repeat(args.max_ttl),
-                    repeat(args.timeout),
-                ),
-            )
-        except KeyboardInterrupt:
-            log.warning("\nKeyboard interrupt received, exiting...")
-            pool.close()
+            log.info(f"Initializing traceroute via {protocol}...")
+
+            # zip up the arguments as all of the targets, repeating the protocol,
+            # max_ttl, and timeout for each individual traceroute
+            try:
+                pool.starmap(
+                    Traceroute,
+                    zip(
+                        targets,
+                        repeat(protocol),
+                        repeat(args.max_ttl),
+                        repeat(args.timeout),
+                    ),
+                )
+            except KeyboardInterrupt:
+                log.warning("\nKeyboard interrupt received, exiting...")
+                pool.close()
 
     log.info(f"\nTotal elapsed time: {time.time() - start_time:.2f} seconds.")
