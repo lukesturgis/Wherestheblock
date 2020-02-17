@@ -9,6 +9,7 @@ import socket
 import ssl
 import sys
 import time
+import random
 from datetime import datetime
 from http.client import HTTPResponse
 from itertools import repeat
@@ -37,7 +38,12 @@ class Traceroute(dict):
     """
 
     def __init__(
-        self, target: str, protocol: str = "icmp", max_ttl: int = 30, timeout: int = 5
+        self,
+        target: str,
+        protocol: str = "icmp",
+        max_ttl: int = 30,
+        timeout: int = 5,
+        stealth: bool = False,
     ) -> None:
         self.hops = []
         self.max_ttl = max_ttl
@@ -46,6 +52,7 @@ class Traceroute(dict):
         self.time = str(datetime.now())
         self.timeout = timeout
         self.protocol = protocol
+        self.stealth = stealth
 
         payloads = {
             "icmp": ICMP(),
@@ -155,6 +162,11 @@ class Traceroute(dict):
                 # finally, calculate metrics for the hop and add it to our results
                 hop.finalize()
                 self.hops.append(hop)
+
+                if self.stealth:
+                    slt = random.randint(1, 5)
+                    log.debug(f"Sleeping for {slt}...")
+                    time.sleep(slt)
 
         self.write_results()
 
@@ -348,6 +360,13 @@ if __name__ == "__main__":
         default=False,
         help="Enable verbose logging.",
     )
+    parser.add_argument(
+        "-s",
+        "--stealth",
+        action="store_true",
+        default=False,
+        help="Sleep for random periods in between requests to avoid ISP detection.",
+    )
     args = parser.parse_args()
 
     # set log level to debug if verbose flag is passed
@@ -371,9 +390,16 @@ if __name__ == "__main__":
         parser.print_help()
         sys.exit(1)
 
-    # only spawn multiple threads if we have multiple targets
-    thread_count = len(targets) if len(targets) < args.threads else args.threads
+    # if we are in stealth mode, then we will only want to request one resource
+    # at a time
+    if args.stealth:
+        thread_count = 1
 
+    else:
+        # only spawn multiple threads if we have multiple targets
+        thread_count = len(targets) if len(targets) < args.threads else args.threads
+
+    # default run all protocols
     if args.protocol == "all":
         protocols = ["icmp", "tcp", "udp", "http", "tls"]
     else:
@@ -401,6 +427,7 @@ if __name__ == "__main__":
                         repeat(protocol),
                         repeat(args.max_ttl),
                         repeat(args.timeout),
+                        repeat(args.stealth),
                     ),
                 )
             except KeyboardInterrupt:
